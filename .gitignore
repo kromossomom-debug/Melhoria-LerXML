@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+*.zip
+*.xlsx
+.venv/
+venv/
+.idea/
+.vscode/
