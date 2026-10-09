@@ -10,7 +10,7 @@ import os
 # Adiciona o diretório atual ao sys.path para garantir importações relativas limpas
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from app_gui import iniciar_aplicacao
+from app_gui_v2 import iniciar_aplicacao
 
 if __name__ == "__main__":
     iniciar_aplicacao()

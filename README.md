@@ -8,9 +8,13 @@ Aplicação desktop moderna em Python com visual corporativo e intuitivo para le
 
 - **Layout Moderno e Intuitivo**:
   - Interface desktop nativa usando `CustomTkinter`.
-  - Alternância de tema (**Escuro**, **Claro** ou **Sistema**).
-  - Cards com métricas em tempo real: Quantidade de notas, Soma de itens, Valor Total e Total de Tributos.
-  - Tabela com colunas organizadas, busca instantânea e duplo-clique para ver detalhes completos.
+  - Fluxo guiado em três etapas: carregar XMLs, escolher colunas e exportar.
+  - Cards com quantidade de notas, itens, valor total e tags XML descobertas.
+  - Tabela pesquisável e duplo-clique para conferir resumo, itens e tags da nota.
+  - Seleção de campos integrada à tela principal, com os campos disponíveis de um lado
+    e a ordem final das colunas do Excel do outro.
+  - Janela maximizada, cartões de seleção maiores em duas colunas e paginação para
+    manter a navegação fluida mesmo com centenas de campos ou milhares de notas.
 
 - **Campos Extraídos**:
   - **Identificação**: Chave de acesso (44 dígitos), Número da Nota, Série, Data e Hora de Emissão, Data de Saída/Entrada, Natureza da Operação e Tipo (Entrada/Saída).
@@ -23,14 +27,30 @@ Aplicação desktop moderna em Python com visual corporativo e intuitivo para le
   - **Detalhamento de Itens/Produtos**: Código, Descrição, NCM, CFOP, Unidade, Quantidade, Valor Unitário, Valor Total e tributos individuais por item.
 
 - **Exportação para Excel (.xlsx)**:
-  - O botão **Selecionar campos** permite marcar exatamente quais informações serão
-    incluídas no relatório.
-  - A seleção é independente para as abas `Notas Fiscais` e `Itens das Notas`, com
-    atalhos para marcar ou desmarcar todos os campos.
-  - Planilha formatada profissionalmente com **duas abas**:
-    1. `Notas Fiscais`: Uma linha consolidada por NF-e com todas as colunas organizadas.
-    2. `Itens das Notas`: Detalhamento completo item a item vinculado à nota fiscal.
+  - A área **Campos para exportar** permite marcar exatamente quais informações serão
+    incluídas, sem abrir janelas adicionais.
+  - Os filtros `Dados da nota`, `Itens e produtos` e `Tags encontradas no XML` servem
+    apenas para organizar a busca; nenhuma categoria exige uma seleção mínima.
+  - Os campos aparecem em ordem alfabética e podem ser localizados pelo nome ou pela
+    tag XML, como `nNF`, `xProd` e `vNF`; a busca ignora maiúsculas e acentos.
+  - A interface apresenta o significado fiscal em português, como `Número do pedido`,
+    `Quantidade comercial do produto` e `Município do destinatário`; o caminho técnico
+    continua disponível internamente para garantir a extração correta.
+  - Após carregar os arquivos, a categoria **Tags encontradas no XML** é montada automaticamente
+    com todas as tags-folha e atributos existentes nos XMLs, usando o caminho completo
+    para diferenciar tags repetidas em pontos distintos da NF-e.
+  - A planilha gerada possui uma única aba, `Dados Selecionados`. A primeira coluna é
+    sempre `Chave da NF-e`; as colunas seguintes contêm somente os campos marcados.
+    Quando um caminho se repete, os valores são reunidos na mesma célula por `|`.
+  - A lista de tags encontradas é aberta automaticamente. Tags técnicas conhecidas também
+    recebem um nome amigável; por exemplo, pesquisar `pedido` encontra `xPed` e
+    `nItemPed`, preservando o caminho XML completo para diferenciar cada ocorrência.
+  - Cada caixa corresponde a um único caminho XML e exporta somente o valor dessa tag.
+    No exemplo, `Número do pedido` representa `infNFe/det/prod/xPed` e gera apenas o
+    valor `4503929479`, sem acrescentar caminho ou outros campos à célula.
   - Estilização com cabeçalho azul marinho, fontes corporativas, linhas zebradas, autofiltro ativo e formatação numérica nativa de moeda (`R$ #,##0.00`) e quantidades.
+  - Leitura e exportação são executadas fora da interface. A busca possui debounce,
+    as tags descobertas usam cache e tabelas grandes são paginadas.
   - **Botão "🚀 Abrir Arquivo Excel"**: Permite abrir o arquivo gerado diretamente no Excel com 1 clique.
 
 ---
@@ -59,12 +79,11 @@ Aplicação desktop moderna em Python com visual corporativo e intuitivo para le
 ```
 Melhoria LerXML/
 ├── main.py                     # Ponto de entrada principal
-├── app_gui.py                  # Interface gráfica moderna (CustomTkinter)
+├── app_gui_v2.py               # Interface principal redesenhada (CustomTkinter)
 ├── nfe_parser.py               # Motor de leitura e parsing de XMLs
 ├── excel_exporter.py           # Gerador de planilhas Excel formatadas (OpenPyXL)
+├── xml_field_labels.py         # Descrições amigáveis dos campos XML
 ├── requirements.txt            # Lista de dependências Python
 ├── iniciar_programa.bat        # Inicializador rápido para Windows
-├── test_parser_and_excel.py    # Teste automatizado de validação
-└── exemplos_xml/               # Pasta com exemplos de XML para teste
-    └── exemplo_nfe.xml
+└── README.md                    # Documentação do aplicativo
 ```

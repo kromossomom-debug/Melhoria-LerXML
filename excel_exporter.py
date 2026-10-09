@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional, Set
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from xml_field_labels import EXACT_LABELS, describe_xml_path
 
 
 # Estilos Visuais Profissionais
@@ -131,8 +132,101 @@ ITEM_COLUMNS = [
 ]
 
 
+# Rotulos de negocio para caminhos que teriam nomes tecnicos ambiguos.
+# Cada caminho continua representando exclusivamente o valor da propria tag.
+XML_PATH_LABELS = EXACT_LABELS
+
+
 def _selected_columns(columns, selected: Optional[Set[str]]):
     return columns if selected is None else [column for column in columns if column[0] in selected]
+
+
+def _export_selected_data(
+    notas: List[Dict[str, Any]],
+    output_path: str,
+    selected_fields: Dict[str, List[str]],
+) -> str:
+    """Exporta uma linha por NF-e: chave obrigatoria + campos escolhidos."""
+    note_specs = {
+        column[0]: column for column in NOTA_COLUMNS if column[0] != "chave"
+    }
+    item_specs = {
+        column[0]: column for column in ITEM_COLUMNS if column[0] != "chave"
+    }
+    selected_notes = [key for key in selected_fields.get("notas", []) if key in note_specs]
+    selected_items = [key for key in selected_fields.get("itens", []) if key in item_specs]
+    selected_xml = list(dict.fromkeys(selected_fields.get("xml", [])))
+
+    columns = [("mandatory", "chave", "Chave da NF-e", FMT_TEXT, ALIGN_CENTER, 46)]
+
+    def append_column(section: str, key: str) -> None:
+        if section == "notas" and key in selected_notes:
+            spec = note_specs[key]
+            columns.append(("nota", key, spec[1], spec[2], spec[3], spec[4]))
+        elif section == "itens" and key in selected_items:
+            spec = item_specs[key]
+            columns.append(("item", key, f"Itens - {spec[1]}", FMT_TEXT, ALIGN_LEFT, 28))
+        elif section == "xml" and key in selected_xml:
+            columns.append(("xml", key, describe_xml_path(key), FMT_TEXT, ALIGN_LEFT, 30))
+
+    ordered_ids = selected_fields.get("ordem", [])
+    if ordered_ids:
+        for field_id in ordered_ids:
+            section, separator, key = field_id.partition(":")
+            if separator:
+                append_column(section, key)
+    else:
+        for key in selected_notes:
+            append_column("notas", key)
+        for key in selected_items:
+            append_column("itens", key)
+        for key in selected_xml:
+            append_column("xml", key)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Dados Selecionados"
+    ws.views.sheetView[0].showGridLines = True
+    ws.freeze_panes = "A2"
+    ws.row_dimensions[1].height = 32
+
+    for col_idx, column in enumerate(columns, start=1):
+        _, _, title, _, _, width = column
+        cell = ws.cell(row=1, column=col_idx, value=title)
+        cell.font = FONT_HEADER
+        cell.fill = FILL_HEADER
+        cell.alignment = ALIGN_HEADER
+        cell.border = BORDER_THIN
+        ws.column_dimensions[get_column_letter(col_idx)].width = width
+
+    for row_idx, nf in enumerate(notas, start=2):
+        fill_current = FILL_ZEBRA if row_idx % 2 == 1 else FILL_WHITE
+        for col_idx, column in enumerate(columns, start=1):
+            source, key, _, number_format, alignment, _ = column
+            if source == "mandatory":
+                value = nf.get("chave", "")
+            elif source == "nota":
+                value = nf.get(key, "")
+            elif source == "item":
+                values = [item.get(key, "") for item in nf.get("itens", [])]
+                value = " | ".join(str(item_value) for item_value in values if item_value not in (None, ""))
+            else:
+                values = nf.get("tags_xml", {}).get(key, [])
+                value = " | ".join(str(tag_value) for tag_value in values)
+
+            if isinstance(value, str):
+                value = value[:32767]
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            cell.font = FONT_BODY
+            cell.fill = fill_current
+            cell.alignment = alignment
+            cell.border = BORDER_THIN
+            cell.number_format = number_format
+
+    last_column = get_column_letter(len(columns))
+    ws.auto_filter.ref = f"A1:{last_column}{max(2, len(notas) + 1)}"
+    wb.save(output_path)
+    return output_path
 
 
 def export_nfe_to_excel(
@@ -141,17 +235,22 @@ def export_nfe_to_excel(
     selected_fields: Optional[Dict[str, List[str]]] = None,
 ) -> str:
     """
-    Gera uma planilha Excel estilizada com duas abas:
+    Gera uma planilha Excel estilizada com duas abas padrao:
     1. 'Notas Fiscais': resumo consolidado de cada NF-e
     2. 'Itens das Notas': detalhamento de cada item/produto
+    3. 'Tags XML': criada quando houver tags descobertas selecionadas
 
-    ``selected_fields`` aceita as chaves ``notas`` e ``itens`` com as listas de
-    campos desejados. Quando omitido, preserva o comportamento anterior e exporta
-    todas as colunas.
+    ``selected_fields`` aceita ``notas``, ``itens`` e ``xml``. Quando informado,
+    gera uma unica aba com a chave obrigatoria e somente os campos escolhidos.
+    Quando omitido, preserva o comportamento anterior e exporta todas as colunas.
     """
-    selected_fields = selected_fields or {}
+    if selected_fields is not None:
+        return _export_selected_data(notas, output_path, selected_fields)
+
+    selected_fields = {}
     selected_notas = set(selected_fields["notas"]) if "notas" in selected_fields else None
     selected_itens = set(selected_fields["itens"]) if "itens" in selected_fields else None
+    selected_xml = selected_fields.get("xml", [])
     colunas_notas = _selected_columns(NOTA_COLUMNS, selected_notas)
     colunas_itens = _selected_columns(ITEM_COLUMNS, selected_itens)
     if not colunas_notas or not colunas_itens:
@@ -443,6 +542,44 @@ def export_nfe_to_excel(
     # Adicionar AutoFiltro na Aba 2
     ultima_col_letra_itens = get_column_letter(len(colunas_itens))
     ws_itens.auto_filter.ref = f"A1:{ultima_col_letra_itens}{max(2, linha_item_idx - 1)}"
+
+    # ----------------------------------------------------
+    # ABA 3: TAGS DESCOBERTAS DINAMICAMENTE NOS XMLS
+    # ----------------------------------------------------
+    if selected_xml:
+        ws_xml = wb.create_sheet(title="Tags XML")
+        ws_xml.views.sheetView[0].showGridLines = True
+        ws_xml.freeze_panes = "A2"
+        xml_headers = ["Arquivo Origem", *selected_xml]
+
+        ws_xml.row_dimensions[1].height = 32
+        for col_idx, header in enumerate(xml_headers, start=1):
+            cell = ws_xml.cell(row=1, column=col_idx, value=header)
+            cell.font = FONT_HEADER
+            cell.fill = FILL_HEADER
+            cell.alignment = ALIGN_HEADER
+            cell.border = BORDER_THIN
+            ws_xml.column_dimensions[get_column_letter(col_idx)].width = 35 if col_idx == 1 else 28
+
+        for row_idx, nf in enumerate(notas, start=2):
+            fill_current = FILL_ZEBRA if row_idx % 2 == 1 else FILL_WHITE
+            tags_xml = nf.get("tags_xml", {})
+            row_values = [nf.get("arquivo_origem", "")]
+            for path in selected_xml:
+                values = tags_xml.get(path, [])
+                joined = " | ".join(str(value) for value in values)
+                row_values.append(joined[:32767])
+
+            for col_idx, value in enumerate(row_values, start=1):
+                cell = ws_xml.cell(row=row_idx, column=col_idx, value=value)
+                cell.font = FONT_BODY
+                cell.fill = fill_current
+                cell.alignment = ALIGN_LEFT
+                cell.border = BORDER_THIN
+                cell.number_format = FMT_TEXT
+
+        last_xml_column = get_column_letter(len(xml_headers))
+        ws_xml.auto_filter.ref = f"A1:{last_xml_column}{max(2, len(notas) + 1)}"
 
     # Salvar arquivo
     wb.save(output_path)

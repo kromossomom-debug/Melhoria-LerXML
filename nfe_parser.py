@@ -147,6 +147,31 @@ class NFeParser:
         return [child for child in element if clean_tag(child.tag) == tag_name]
 
     @classmethod
+    def _extract_xml_tags(cls, inf_nfe: ET.Element) -> Dict[str, List[str]]:
+        """Extrai dinamicamente valores e atributos usando caminhos sem namespace."""
+        extracted: Dict[str, List[str]] = {}
+
+        def add_value(path: str, value: Any) -> None:
+            text = str(value).strip()
+            if text:
+                extracted.setdefault(path, []).append(text)
+
+        def walk(element: ET.Element, path: str) -> None:
+            for attribute, value in element.attrib.items():
+                add_value(f"{path}/@{clean_tag(attribute)}", value)
+
+            children = list(element)
+            if not children:
+                add_value(path, element.text or "")
+                return
+
+            for child in children:
+                walk(child, f"{path}/{clean_tag(child.tag)}")
+
+        walk(inf_nfe, clean_tag(inf_nfe.tag))
+        return extracted
+
+    @classmethod
     def parse_file(cls, file_path: str) -> Dict[str, Any]:
         """Lê e processa um arquivo XML do disco."""
         try:
@@ -496,5 +521,8 @@ class NFeParser:
 
             # Itens
             'itens': itens,
-            'quantidade_itens_distintos': len(itens)
+            'quantidade_itens_distintos': len(itens),
+
+            # Todas as tags-folha encontradas no XML, agrupadas por caminho.
+            'tags_xml': cls._extract_xml_tags(inf_nfe)
         }
