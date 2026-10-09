@@ -5,7 +5,7 @@ Inclui formatação profissional corporativa, abas 'Notas Fiscais' e 'Itens das 
 zebrado, auto-filtro, formatos numéricos brasileiros e ajuste inteligente de colunas.
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Set
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -45,12 +45,118 @@ FMT_NUMBER_INT = '#,##0'
 FMT_TEXT = '@'
 
 
-def export_nfe_to_excel(notas: List[Dict[str, Any]], output_path: str) -> str:
+# Chave interna, titulo exibido no Excel, formato, alinhamento e largura.
+# Estas listas tambem alimentam a janela de selecao de campos da interface.
+NOTA_COLUMNS = [
+    ("chave", "Chave de Acesso", FMT_TEXT, ALIGN_CENTER, 46),
+    ("numero_nota", "Número NF", FMT_NUMBER_INT, ALIGN_CENTER, 14),
+    ("serie", "Série", FMT_TEXT, ALIGN_CENTER, 10),
+    ("data_emissao", "Data Emissão", FMT_TEXT, ALIGN_CENTER, 20),
+    ("data_saida", "Data Saída/Entrada", FMT_TEXT, ALIGN_CENTER, 20),
+    ("tipo_operacao", "Tipo Operação", FMT_TEXT, ALIGN_CENTER, 16),
+    ("natureza_operacao", "Natureza Operação", FMT_TEXT, ALIGN_LEFT, 28),
+    ("emit_nome", "Emitente (Razão Social)", FMT_TEXT, ALIGN_LEFT, 32),
+    ("emit_cnpj_formatado", "Emitente CNPJ/CPF", FMT_TEXT, ALIGN_CENTER, 20),
+    ("emit_ie", "Emitente IE", FMT_TEXT, ALIGN_CENTER, 16),
+    ("emit_municipio", "Emitente Município", FMT_TEXT, ALIGN_LEFT, 20),
+    ("emit_uf", "Emitente UF", FMT_TEXT, ALIGN_CENTER, 10),
+    ("dest_nome", "Destinatário (Razão Social)", FMT_TEXT, ALIGN_LEFT, 32),
+    ("dest_cnpj_formatado", "Destinatário CNPJ/CPF", FMT_TEXT, ALIGN_CENTER, 20),
+    ("dest_ie", "Destinatário IE", FMT_TEXT, ALIGN_CENTER, 16),
+    ("dest_municipio", "Destinatário Município", FMT_TEXT, ALIGN_LEFT, 20),
+    ("dest_uf", "Destinatário UF", FMT_TEXT, ALIGN_CENTER, 10),
+    ("modalidade_frete", "Modalidade Frete", FMT_TEXT, ALIGN_LEFT, 26),
+    ("transp_nome", "Transportadora", FMT_TEXT, ALIGN_LEFT, 30),
+    ("transp_cnpj_formatado", "Transportadora CNPJ/CPF", FMT_TEXT, ALIGN_CENTER, 20),
+    ("transp_ie", "Transportadora IE", FMT_TEXT, ALIGN_CENTER, 16),
+    ("placa_veiculo", "Placa do Caminhão", FMT_TEXT, ALIGN_CENTER, 18),
+    ("placa_uf", "UF Placa", FMT_TEXT, ALIGN_CENTER, 10),
+    ("rntrc", "RNTRC", FMT_TEXT, ALIGN_CENTER, 14),
+    ("quantidade_volumes", "Qtd Volumes", FMT_NUMBER_INT, ALIGN_RIGHT, 14),
+    ("especie_volumes", "Espécie Volumes", FMT_TEXT, ALIGN_LEFT, 16),
+    ("peso_liquido", "Peso Líquido (kg)", FMT_NUMBER_3DEC, ALIGN_RIGHT, 18),
+    ("peso_bruto", "Peso Bruto (kg)", FMT_NUMBER_3DEC, ALIGN_RIGHT, 18),
+    ("quantidade_total_itens", "Qtd Total Itens", FMT_NUMBER_2DEC, ALIGN_RIGHT, 18),
+    ("total_produtos", "Valor Produtos", FMT_CURRENCY, ALIGN_RIGHT, 18),
+    ("total_frete", "Valor Frete", FMT_CURRENCY, ALIGN_RIGHT, 16),
+    ("total_seguro", "Valor Seguro", FMT_CURRENCY, ALIGN_RIGHT, 16),
+    ("total_desconto", "Valor Desconto", FMT_CURRENCY, ALIGN_RIGHT, 16),
+    ("outras_despesas", "Outras Despesas", FMT_CURRENCY, ALIGN_RIGHT, 16),
+    ("total_nota", "Valor Total da NF", FMT_CURRENCY, ALIGN_RIGHT, 20),
+    ("bc_icms", "Base ICMS", FMT_CURRENCY, ALIGN_RIGHT, 16),
+    ("valor_icms", "Valor ICMS", FMT_CURRENCY, ALIGN_RIGHT, 16),
+    ("bc_icms_st", "Base ICMS ST", FMT_CURRENCY, ALIGN_RIGHT, 16),
+    ("valor_icms_st", "Valor ICMS ST", FMT_CURRENCY, ALIGN_RIGHT, 16),
+    ("valor_ipi", "Valor IPI", FMT_CURRENCY, ALIGN_RIGHT, 16),
+    ("valor_pis", "Valor PIS", FMT_CURRENCY, ALIGN_RIGHT, 16),
+    ("valor_cofins", "Valor COFINS", FMT_CURRENCY, ALIGN_RIGHT, 16),
+    ("total_impostos", "Total Tributos (Soma)", FMT_CURRENCY, ALIGN_RIGHT, 20),
+    ("total_tributos_aproximado", "Trib. Aproximado (IBPT)", FMT_CURRENCY, ALIGN_RIGHT, 20),
+    ("informacoes_complementares", "Informações Complementares", FMT_TEXT, ALIGN_LEFT, 45),
+    ("informacoes_adicionais_fisco", "Informações Adicionais Fisco", FMT_TEXT, ALIGN_LEFT, 35),
+    ("arquivo_origem", "Arquivo Origem", FMT_TEXT, ALIGN_LEFT, 35),
+]
+
+ITEM_COLUMNS = [
+    ("chave", "Chave da NF-e", FMT_TEXT, ALIGN_CENTER, 46),
+    ("numero_nota", "Número NF", FMT_NUMBER_INT, ALIGN_CENTER, 14),
+    ("serie", "Série", FMT_TEXT, ALIGN_CENTER, 10),
+    ("n_item", "Item Nº", FMT_NUMBER_INT, ALIGN_CENTER, 10),
+    ("c_prod", "Código Produto", FMT_TEXT, ALIGN_LEFT, 18),
+    ("c_ean", "Código EAN", FMT_TEXT, ALIGN_CENTER, 16),
+    ("x_prod", "Descrição do Produto", FMT_TEXT, ALIGN_LEFT, 36),
+    ("ncm", "NCM", FMT_TEXT, ALIGN_CENTER, 12),
+    ("cfop", "CFOP", FMT_TEXT, ALIGN_CENTER, 10),
+    ("u_com", "Unidade", FMT_TEXT, ALIGN_CENTER, 10),
+    ("q_com", "Quantidade", FMT_NUMBER_2DEC, ALIGN_RIGHT, 16),
+    ("v_un_com", "Valor Unitário", FMT_CURRENCY, ALIGN_RIGHT, 16),
+    ("v_prod", "Valor Total Produto", FMT_CURRENCY, ALIGN_RIGHT, 18),
+    ("v_desc", "Desconto Item", FMT_CURRENCY, ALIGN_RIGHT, 16),
+    ("v_frete", "Frete Item", FMT_CURRENCY, ALIGN_RIGHT, 16),
+    ("orig_icms", "Origem ICMS", FMT_TEXT, ALIGN_CENTER, 12),
+    ("cst_icms", "CST/CSOSN ICMS", FMT_TEXT, ALIGN_CENTER, 14),
+    ("v_bc_icms", "Base ICMS", FMT_CURRENCY, ALIGN_RIGHT, 16),
+    ("p_icms", "Alíquota ICMS (%)", FMT_NUMBER_2DEC, ALIGN_RIGHT, 16),
+    ("v_icms", "Valor ICMS", FMT_CURRENCY, ALIGN_RIGHT, 16),
+    ("cst_ipi", "CST IPI", FMT_TEXT, ALIGN_CENTER, 12),
+    ("p_ipi", "Alíquota IPI (%)", FMT_NUMBER_2DEC, ALIGN_RIGHT, 16),
+    ("v_ipi", "Valor IPI", FMT_CURRENCY, ALIGN_RIGHT, 16),
+    ("cst_pis", "CST PIS", FMT_TEXT, ALIGN_CENTER, 12),
+    ("p_pis", "Alíquota PIS (%)", FMT_NUMBER_2DEC, ALIGN_RIGHT, 16),
+    ("v_pis", "Valor PIS", FMT_CURRENCY, ALIGN_RIGHT, 16),
+    ("cst_cofins", "CST COFINS", FMT_TEXT, ALIGN_CENTER, 12),
+    ("p_cofins", "Alíquota COFINS (%)", FMT_NUMBER_2DEC, ALIGN_RIGHT, 16),
+    ("v_cofins", "Valor COFINS", FMT_CURRENCY, ALIGN_RIGHT, 16),
+    ("v_tot_trib", "Trib. Aprox. Item", FMT_CURRENCY, ALIGN_RIGHT, 18),
+]
+
+
+def _selected_columns(columns, selected: Optional[Set[str]]):
+    return columns if selected is None else [column for column in columns if column[0] in selected]
+
+
+def export_nfe_to_excel(
+    notas: List[Dict[str, Any]],
+    output_path: str,
+    selected_fields: Optional[Dict[str, List[str]]] = None,
+) -> str:
     """
     Gera uma planilha Excel estilizada com duas abas:
     1. 'Notas Fiscais': resumo consolidado de cada NF-e
     2. 'Itens das Notas': detalhamento de cada item/produto
+
+    ``selected_fields`` aceita as chaves ``notas`` e ``itens`` com as listas de
+    campos desejados. Quando omitido, preserva o comportamento anterior e exporta
+    todas as colunas.
     """
+    selected_fields = selected_fields or {}
+    selected_notas = set(selected_fields["notas"]) if "notas" in selected_fields else None
+    selected_itens = set(selected_fields["itens"]) if "itens" in selected_fields else None
+    colunas_notas = _selected_columns(NOTA_COLUMNS, selected_notas)
+    colunas_itens = _selected_columns(ITEM_COLUMNS, selected_itens)
+    if not colunas_notas or not colunas_itens:
+        raise ValueError("Selecione ao menos um campo para cada aba do Excel.")
+
     wb = openpyxl.Workbook()
 
     # ----------------------------------------------------
@@ -61,7 +167,7 @@ def export_nfe_to_excel(notas: List[Dict[str, Any]], output_path: str) -> str:
     ws_notas.views.sheetView[0].showGridLines = True
     ws_notas.freeze_panes = "A2"
 
-    colunas_notas = [
+    _legacy_colunas_notas = [
         ("Chave de Acesso", FMT_TEXT, ALIGN_CENTER, 46),
         ("Número NF", FMT_NUMBER_INT, ALIGN_CENTER, 14),
         ("Série", FMT_TEXT, ALIGN_CENTER, 10),
@@ -125,7 +231,7 @@ def export_nfe_to_excel(notas: List[Dict[str, Any]], output_path: str) -> str:
 
     # Escrever Cabeçalho da Aba 1
     ws_notas.row_dimensions[1].height = 28
-    for col_idx, (col_name, _, _, _) in enumerate(colunas_notas, start=1):
+    for col_idx, (_, col_name, _, _, _) in enumerate(colunas_notas, start=1):
         cell = ws_notas.cell(row=1, column=col_idx, value=col_name)
         cell.font = FONT_HEADER
         cell.fill = FILL_HEADER
@@ -137,7 +243,7 @@ def export_nfe_to_excel(notas: List[Dict[str, Any]], output_path: str) -> str:
         ws_notas.row_dimensions[row_idx].height = 20
         fill_current = FILL_ZEBRA if row_idx % 2 == 1 else FILL_WHITE
 
-        valores = [
+        valores_completos = [
             nf.get('chave', ''),
             to_int_safe(nf.get('numero_nota', 0)),
             nf.get('serie', ''),
@@ -199,9 +305,11 @@ def export_nfe_to_excel(notas: List[Dict[str, Any]], output_path: str) -> str:
             nf.get('arquivo_origem', '')
         ]
 
-        for col_idx, val in enumerate(valores, start=1):
+        valores_por_chave = dict(zip((column[0] for column in NOTA_COLUMNS), valores_completos))
+        for col_idx, column in enumerate(colunas_notas, start=1):
+            key, _, num_fmt, align, _ = column
+            val = valores_por_chave[key]
             cell = ws_notas.cell(row=row_idx, column=col_idx, value=val)
-            _, num_fmt, align, _ = colunas_notas[col_idx - 1]
             cell.font = FONT_BODY
             cell.fill = fill_current
             cell.alignment = align
@@ -212,7 +320,7 @@ def export_nfe_to_excel(notas: List[Dict[str, Any]], output_path: str) -> str:
                 cell.number_format = '@'
 
     # Ajustar largura das colunas da Aba 1
-    for col_idx, (_, _, _, default_width) in enumerate(colunas_notas, start=1):
+    for col_idx, (_, _, _, _, default_width) in enumerate(colunas_notas, start=1):
         col_letter = get_column_letter(col_idx)
         ws_notas.column_dimensions[col_letter].width = default_width
 
@@ -229,7 +337,7 @@ def export_nfe_to_excel(notas: List[Dict[str, Any]], output_path: str) -> str:
     ws_itens.views.sheetView[0].showGridLines = True
     ws_itens.freeze_panes = "A2"
 
-    colunas_itens = [
+    _legacy_colunas_itens = [
         ("Chave da NF-e", FMT_TEXT, ALIGN_CENTER, 46),
         ("Número NF", FMT_NUMBER_INT, ALIGN_CENTER, 14),
         ("Série", FMT_TEXT, ALIGN_CENTER, 10),
@@ -264,7 +372,7 @@ def export_nfe_to_excel(notas: List[Dict[str, Any]], output_path: str) -> str:
 
     # Cabeçalho da Aba 2
     ws_itens.row_dimensions[1].height = 28
-    for col_idx, (col_name, _, _, _) in enumerate(colunas_itens, start=1):
+    for col_idx, (_, col_name, _, _, _) in enumerate(colunas_itens, start=1):
         cell = ws_itens.cell(row=1, column=col_idx, value=col_name)
         cell.font = FONT_HEADER
         cell.fill = FILL_HEADER
@@ -278,7 +386,7 @@ def export_nfe_to_excel(notas: List[Dict[str, Any]], output_path: str) -> str:
             ws_itens.row_dimensions[linha_item_idx].height = 20
             fill_current = FILL_ZEBRA if linha_item_idx % 2 == 1 else FILL_WHITE
 
-            valores_item = [
+            valores_item_completos = [
                 item.get('chave', ''),
                 to_int_safe(item.get('numero_nota', 0)),
                 item.get('serie', ''),
@@ -311,9 +419,11 @@ def export_nfe_to_excel(notas: List[Dict[str, Any]], output_path: str) -> str:
                 item.get('v_tot_trib', 0.0)
             ]
 
-            for col_idx, val in enumerate(valores_item, start=1):
+            valores_item_por_chave = dict(zip((column[0] for column in ITEM_COLUMNS), valores_item_completos))
+            for col_idx, column in enumerate(colunas_itens, start=1):
+                key, _, num_fmt, align, _ = column
+                val = valores_item_por_chave[key]
                 cell = ws_itens.cell(row=linha_item_idx, column=col_idx, value=val)
-                _, num_fmt, align, _ = colunas_itens[col_idx - 1]
                 cell.font = FONT_BODY
                 cell.fill = fill_current
                 cell.alignment = align
@@ -326,7 +436,7 @@ def export_nfe_to_excel(notas: List[Dict[str, Any]], output_path: str) -> str:
             linha_item_idx += 1
 
     # Ajustar largura das colunas da Aba 2
-    for col_idx, (_, _, _, default_width) in enumerate(colunas_itens, start=1):
+    for col_idx, (_, _, _, _, default_width) in enumerate(colunas_itens, start=1):
         col_letter = get_column_letter(col_idx)
         ws_itens.column_dimensions[col_letter].width = default_width
 

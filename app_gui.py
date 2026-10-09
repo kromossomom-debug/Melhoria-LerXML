@@ -15,7 +15,7 @@ from tkinter import ttk, filedialog, messagebox
 import customtkinter as ctk
 
 from nfe_parser import NFeParser, format_brazilian_number
-from excel_exporter import export_nfe_to_excel
+from excel_exporter import export_nfe_to_excel, NOTA_COLUMNS, ITEM_COLUMNS
 
 
 # Configuração padrão de tema
@@ -271,6 +271,88 @@ class DetalhesNotaModal(ctk.CTkToplevel):
         scroll_y.pack(side="right", fill="y")
 
 
+class SelecaoCamposModal(ctk.CTkToplevel):
+    """Permite escolher quais campos serão incluídos em cada aba do Excel."""
+
+    def __init__(self, parent, selected_fields, on_apply):
+        super().__init__(parent)
+        self.title("Selecionar campos do Excel")
+        self.geometry("760x650")
+        self.minsize(650, 520)
+        self.transient(parent)
+        self.grab_set()
+        self.on_apply = on_apply
+        self.variables = {"notas": {}, "itens": {}}
+
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.pack(fill="x", padx=20, pady=(18, 8))
+        ctk.CTkLabel(
+            header,
+            text="Campos que aparecerão no Excel",
+            font=ctk.CTkFont(size=19, weight="bold"),
+        ).pack(anchor="w")
+        ctk.CTkLabel(
+            header,
+            text="Marque somente as informações necessárias. A ordem das colunas será mantida.",
+            text_color=("gray40", "gray65"),
+        ).pack(anchor="w", pady=(3, 0))
+
+        self.tabview = ctk.CTkTabview(self)
+        self.tabview.pack(fill="both", expand=True, padx=20, pady=8)
+        self._build_tab(
+            self.tabview.add("Notas Fiscais"), "notas", NOTA_COLUMNS,
+            set(selected_fields.get("notas", [])),
+        )
+        self._build_tab(
+            self.tabview.add("Itens das Notas"), "itens", ITEM_COLUMNS,
+            set(selected_fields.get("itens", [])),
+        )
+
+        footer = ctk.CTkFrame(self, fg_color="transparent")
+        footer.pack(fill="x", padx=20, pady=(4, 18))
+        ctk.CTkButton(footer, text="Cancelar", width=110, fg_color=("gray65", "gray35"),
+                      command=self.destroy).pack(side="right", padx=(8, 0))
+        ctk.CTkButton(footer, text="Aplicar seleção", width=140,
+                      command=self._apply).pack(side="right")
+
+    def _build_tab(self, parent, section, columns, selected):
+        actions = ctk.CTkFrame(parent, fg_color="transparent")
+        actions.pack(fill="x", padx=8, pady=(8, 2))
+        ctk.CTkButton(actions, text="Marcar todos", width=110, height=28,
+                      command=lambda: self._set_all(section, True)).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(actions, text="Desmarcar todos", width=125, height=28,
+                      fg_color=("gray65", "gray35"),
+                      command=lambda: self._set_all(section, False)).pack(side="left")
+
+        scroll = ctk.CTkScrollableFrame(parent)
+        scroll.pack(fill="both", expand=True, padx=8, pady=(4, 8))
+        scroll.grid_columnconfigure((0, 1), weight=1)
+        for index, (key, title, _, _, _) in enumerate(columns):
+            var = tk.BooleanVar(value=key in selected)
+            self.variables[section][key] = var
+            checkbox = ctk.CTkCheckBox(scroll, text=title, variable=var)
+            checkbox.grid(row=index // 2, column=index % 2, sticky="w", padx=12, pady=7)
+
+    def _set_all(self, section, checked):
+        for variable in self.variables[section].values():
+            variable.set(checked)
+
+    def _apply(self):
+        selected = {
+            section: [key for key, variable in variables.items() if variable.get()]
+            for section, variables in self.variables.items()
+        }
+        if not selected["notas"] or not selected["itens"]:
+            messagebox.showwarning(
+                "Seleção incompleta",
+                "Selecione ao menos um campo em cada aba.",
+                parent=self,
+            )
+            return
+        self.on_apply(selected)
+        self.destroy()
+
+
 class AppNFe(ctk.CTk):
     """Janela Principal do Aplicativo."""
 
@@ -285,6 +367,10 @@ class AppNFe(ctk.CTk):
         self.notas_carregadas: List[Dict[str, Any]] = []
         self.ultimo_excel_salvo: Optional[str] = None
         self.is_loading: bool = False
+        self.selected_fields = {
+            "notas": [column[0] for column in NOTA_COLUMNS],
+            "itens": [column[0] for column in ITEM_COLUMNS],
+        }
 
         self._configurar_estilo_tabela()
         self._criar_layout()
@@ -414,6 +500,17 @@ class AppNFe(ctk.CTk):
             command=self._limpar_lista
         )
         self.btn_limpar.pack(side="left", padx=4)
+
+        self.btn_selecionar_campos = ctk.CTkButton(
+            btn_box,
+            text="Selecionar campos",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color="#7c3aed",
+            hover_color="#6d28d9",
+            height=34,
+            command=self._abrir_selecao_campos,
+        )
+        self.btn_selecionar_campos.pack(side="left", padx=4)
 
         # Barra de Pesquisa / Filtro
         search_box = ctk.CTkFrame(self.toolbar_frame, fg_color="transparent")
@@ -564,6 +661,18 @@ class AppNFe(ctk.CTk):
             style.configure("Treeview", background="#1e293b", foreground="#f8fafc", fieldbackground="#1e293b")
             style.configure("Treeview.Heading", background="#0f172a", foreground="#93c5fd")
             style.map("Treeview", background=[("selected", "#2563eb")], foreground=[("selected", "#ffffff")])
+
+    def _abrir_selecao_campos(self):
+        SelecaoCamposModal(self, self.selected_fields, self._aplicar_selecao_campos)
+
+    def _aplicar_selecao_campos(self, selected_fields):
+        self.selected_fields = selected_fields
+        total = len(selected_fields["notas"]) + len(selected_fields["itens"])
+        self.btn_selecionar_campos.configure(text=f"Selecionar campos ({total})")
+        self.lbl_status.configure(
+            text=f"Seleção atualizada: {len(selected_fields['notas'])} campos de notas e "
+                 f"{len(selected_fields['itens'])} de itens."
+        )
 
     def _carregar_arquivos_dialog(self):
         if self.is_loading:
@@ -759,7 +868,11 @@ class AppNFe(ctk.CTk):
             self.lbl_status.configure(text="Gerando planilha Excel...")
             self.update_idletasks()
 
-            caminho_gerado = export_nfe_to_excel(self.notas_carregadas, caminho_salvar)
+            caminho_gerado = export_nfe_to_excel(
+                self.notas_carregadas,
+                caminho_salvar,
+                selected_fields=self.selected_fields,
+            )
             self.ultimo_excel_salvo = caminho_gerado
 
             # Habilitar botão de abrir Excel imediatamente

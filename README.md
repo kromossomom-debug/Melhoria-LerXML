@@ -23,6 +23,10 @@ Aplicação desktop moderna em Python com visual corporativo e intuitivo para le
   - **Detalhamento de Itens/Produtos**: Código, Descrição, NCM, CFOP, Unidade, Quantidade, Valor Unitário, Valor Total e tributos individuais por item.
 
 - **Exportação para Excel (.xlsx)**:
+  - O botão **Selecionar campos** permite marcar exatamente quais informações serão
+    incluídas no relatório.
+  - A seleção é independente para as abas `Notas Fiscais` e `Itens das Notas`, com
+    atalhos para marcar ou desmarcar todos os campos.
   - Planilha formatada profissionalmente com **duas abas**:
     1. `Notas Fiscais`: Uma linha consolidada por NF-e com todas as colunas organizadas.
     2. `Itens das Notas`: Detalhamento completo item a item vinculado à nota fiscal.
