@@ -28,6 +28,13 @@ A planilha gerada contém a aba `Dados Selecionados`.
 - Quando uma tag aparece em vários itens, seus valores ficam na mesma célula, separados por `|`.
 - O caminho técnico da tag é usado internamente, mas o cabeçalho utiliza uma descrição amigável.
 
+Exemplo:
+
+| Chave da NF-e | Número do pedido | Razão social do destinatário |
+|---|---|---|
+| 00000000000000000000000000000000000000000000 | 1234567890 | EMPRESA DESTINATÁRIA EXEMPLO LTDA |
+
+Nesse caso, `Número do pedido` corresponde internamente ao caminho `infNFe/det/prod/xPed`, mas a célula recebe somente `1234567890`.
 
 ## Requisitos
 

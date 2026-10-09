@@ -239,7 +239,7 @@ class AppNFe(ctk.CTk):
 
         self.btn_clear = self._sidebar_button(sidebar, "Limpar sessão", self._clear_all, "#334155")
         self.btn_clear.pack(side="bottom", fill="x", padx=18, pady=(0, 10))
-        ctk.CTkLabel(sidebar, text="LDC • Leitor de documentos fiscais", font=ctk.CTkFont(size=10),
+        ctk.CTkLabel(sidebar, text="Leitor de documentos fiscais", font=ctk.CTkFont(size=10),
                      text_color="#64748b").pack(side="bottom", pady=(8, 18))
 
     def _sidebar_button(self, parent, text, command, color):
