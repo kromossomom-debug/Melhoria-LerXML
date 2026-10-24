@@ -178,3 +178,9 @@ O arquivo continua salvo no local escolhido. Verifique se existe um programa ass
 - Nenhum dado é enviado para serviços externos.
 - As seleções permanecem ativas enquanto a sessão estiver aberta.
 - O botão `Limpar sessão` remove da memória as notas e as seleções atuais.
+
+## ☕ Apoie o projeto
+
+Curtiu o projeto? Pague um café para o autor e ajude a manter as atualizações.
+
+<a href="https://buymeacoffee.com/kromossomoc"><img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-kromossomoc-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy Me a Coffee: kromossomoc" height="36"></a>
